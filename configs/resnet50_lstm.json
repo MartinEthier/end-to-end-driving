@@ -1,0 +1,37 @@
+{
+
+    "model":{
+        
+
+        "feature_extractor":{
+            "name": "resnet50"
+        },
+        "sequence_model":{
+
+        }
+    },
+    "training":{
+        "epochs": 50,
+        "early_stop": 10,
+        "gpu_id": 0
+
+    },
+    "data_loader":{
+        "name": "DefaultDataLoader",
+        "args":{
+            "batch_size": 8,
+            "shuffle": true,
+            "validation_split": 0.1,
+            "num_workers": 2
+        }
+    },
+    "lr_scheduler":{
+        
+    },
+    "optimizer":{
+        "name": "Adam",
+        "args":{
+
+        }
+    }
+}

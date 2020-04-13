@@ -1,16 +1,26 @@
 import torch
-
-
 from torchvision import models
 
 
-# Init pretrained resnet
-resnet50 = models.resnet152(pretrained=True)
-print(resnet50)
-# Remove last fully connecetd layer
-modules=list(resnet50.children())[:-1]
-resnet50=nn.Sequential(*modules)
-for p in resnet50.parameters():
-    p.requires_grad = False
 
-    
+
+class FeatureExtractor(torch.nn.Module):
+    """
+    Initializes a pretrained ImageNet feature extractor from torchvision.models
+    """
+
+    def __init__(self, model_name):
+        super(FeatureExtractor, self).__init__()
+        
+        # Initialize pretrained model
+        self.feature_extractor = getattr(models, self.model_name)(pretrained=True)
+
+        # Remove last fully connected layer and freeze weights
+        modules = list(self.feature_extractor.children())[:-1]
+        self.feature_extractor = torch.nn.Sequential(*modules)
+        for p in self.feature_extractor.parameters():
+            p.requires_grad = False
+
+    def forward(self):
+        return None
+
