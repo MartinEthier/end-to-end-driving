@@ -13,3 +13,4 @@ resnet50=nn.Sequential(*modules)
 for p in resnet50.parameters():
     p.requires_grad = False
 
+    
