@@ -1,7 +1,6 @@
 import torch
 
 
-
 class End2EndNet(torch.nn.Module):
     """
     """

@@ -1,7 +1,5 @@
 import torch
-from torchvision import models
-
-
+import torchvision
 
 
 class FeatureExtractor(torch.nn.Module):
@@ -9,11 +7,11 @@ class FeatureExtractor(torch.nn.Module):
     Initializes a pretrained ImageNet feature extractor from torchvision.models
     """
 
-    def __init__(self, model_name):
+    def __init__(self, model_name, input_size):
         super(FeatureExtractor, self).__init__()
         
         # Initialize pretrained model
-        self.feature_extractor = getattr(models, self.model_name)(pretrained=True)
+        self.feature_extractor = getattr(torchvision.models, self.model_name)(pretrained=True)
 
         # Remove last fully connected layer and freeze weights
         modules = list(self.feature_extractor.children())[:-1]
@@ -21,6 +19,6 @@ class FeatureExtractor(torch.nn.Module):
         for p in self.feature_extractor.parameters():
             p.requires_grad = False
 
-    def forward(self):
-        return None
+    def forward(self, X):
+        return self.feature_extractor(X)
 
