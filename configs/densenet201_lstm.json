@@ -4,7 +4,7 @@
         
 
         "feature_extractor":{
-            "name": "resnet50"
+            "name": "densenet201"
         },
         "sequence_model":{
 

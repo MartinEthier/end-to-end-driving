@@ -16,11 +16,11 @@ class FeatureExtractor(torch.nn.Module):
         # Initialize pretrained model
         self.feature_extractor = getattr(torchvision.models, self.model_name)(pretrained=True)
 
-        # Remove last fully connected layer and freeze weights
+        # Remove last fully connected layer
         modules = list(self.feature_extractor.children())[:-1]
         self.feature_extractor = torch.nn.Sequential(*modules)
-        for p in self.feature_extractor.parameters():
-            p.requires_grad = False
+        # for p in self.feature_extractor.parameters():
+        #     p.requires_grad = False
 
     def forward(self, X):
         return self.feature_extractor(X)
