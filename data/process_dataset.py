@@ -6,6 +6,7 @@ if ros_path in sys.path:
 
 from pathlib import Path
 import argparse
+from concurrent.futures import ProcessPoolExecutor
 
 import numpy as np
 import cv2
@@ -27,9 +28,6 @@ def find_nearest(arr, target):
 
 
 class Route:
-    """
-
-    """
     def __init__(self, route_path):
         self.route_path = route_path
 
@@ -125,7 +123,7 @@ class Route:
                 ret, frame = cap.read()
                 if ret:
                     # Zero pad frame_count and save frame
-                    img_path = img_dir / (str(frame_count).zfill(6) + '.png')
+                    img_path = img_dir / (str(frame_count).zfill(6) + '.jpg')
                     cv2.imwrite(str(img_path), frame)
                     frame_count += 1
                 else:
@@ -133,33 +131,35 @@ class Route:
             cap.release()
 
 
-def main(root_path):
+def process_chunk(root_path, processed_dataset_path, chunk_id):
+    # Loop through each route in the chunk
+    chunk_path = root_path / f"Chunk_{chunk_id}"
+    route_paths = [f for f in chunk_path.iterdir() if f.is_dir()]
+    for route_path in route_paths:
+        # Create a Route object, load and sync the data, then save
+        route = Route(route_path)
+        print(f"Processing route {route.route_time}...")
+        route.load_data()
+        route.sync_arrays()
+        route.save_data(processed_dataset_path)
+
+def main(root_path, chunk_range):
     # Create directory for processed dataset
     processed_dataset_path = root_path / "processed_dataset"
     processed_dataset_path.mkdir()
 
-    # Loop through chunks for the Civic (3 to 10)
-    for chunk_id in range(3, 11):
-        print(f"Processing Chunk_{chunk_id}...")
-        chunk_path = root_path / f"Chunk_{chunk_id}"
-
-        # Loop through each route in the chunk
-        route_paths = [f for f in chunk_path.iterdir() if f.is_dir()]
-        for route_path in route_paths:
-            # Create a Route object, load and sync the data, then save
-            route = Route(route_path)
-            print(f"Processing route {route.route_time}...")
-            route.load_data()
-            route.sync_arrays()
-            print("Saving data...")
-            route.save_data(processed_dataset_path)
-
+    # Loop through specified chunks
+    with ProcessPoolExecutor() as executor:
+        for chunk_id in range(chunk_range[0], chunk_range[1] + 1):
+            executor.submit(process_chunk, root_path, processed_dataset_path, chunk_id)
+        
 
 if __name__=="__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument('root_dir', help='root directory of the comma2k19 dataset')
+    parser.add_argument('root_dir', help='Root directory of the comma2k19 dataset')
+    parser.add_argument('-c', '--chunk_range', type=int, nargs=2, default=[3, 10], help='Which range of chunks to process (default is 3-10 for Honda Civic data)')
     args = parser.parse_args()
 
     root_path = Path(args.root_dir).expanduser()
-    
-    main(root_path)
+
+    main(root_path, args.chunk_range)
