@@ -4,6 +4,9 @@ import os
 
 import torch
 import numpy as np
+import wandb
+
+wandb.init(project="end-to-end-driving")
 
 
 def main():

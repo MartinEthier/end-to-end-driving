@@ -8,6 +8,9 @@ class FeatureExtractor(torch.nn.Module):
     Input images have to be at least 224x224, scaled to be within 0 and 1, then normalized using:
     normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
                                  std=[0.229, 0.224, 0.225])
+
+    In a paper, they got better performance by freezing the first 15
+    blocks of a resnet-50, and fine-tuning the rest.
     """
 
     def __init__(self, model_name, input_size):
