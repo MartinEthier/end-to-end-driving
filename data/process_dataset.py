@@ -1,3 +1,12 @@
+"""
+Run this script to generate jpg images for each frame in the dataset and create 
+numpy arrays for timestamps, steering angles, and vehicles speeds. The dataset
+is organized by route. This is intended to be used for training end-to-end 
+control models. The script also organizes the global frame times, positions,
+velocities, and orientations to be used with the comma library to generate paths
+for end-to-end planner training.
+"""
+
 # Annoying ROS stuff
 import sys
 ros_path = '/opt/ros/kinetic/lib/python2.7/dist-packages'
@@ -39,41 +48,60 @@ class Route:
         self.segment_paths = sorted(segments, key=lambda seg: int(seg.stem))
 
         # Init lists for accumulating segment arrays
-        self.speeds = {'value': [], 't': []}
-        self.angles = {'value': [], 't': []}
+        self.CAN_speeds = {'value': [], 't': []}
+        self.CAN_angles = {'value': [], 't': []}
         self.frame_t = []
+        self.frame_pos = []
+        self.frame_vel = []
+        self.frame_ori = []
 
     def load_data(self):
         """
         Goes through each segment and loads in the np arrays for the speed 
         values, speed timestamps, angle values, angle timestamps, frame 
-        images, and frame timestamps. Concatenates all arrays for the 
-        segments together into 1 array for proper synchronization.
+        images, frame timestamps, frame positions, frame velocities, and frame 
+        orientations. Concatenates all arrays for the segments together into 1 
+        array for proper synchronization.
         """
         for segment_path in self.segment_paths:
             # Load in speed and angle arrays and add to accumulator list
             speed_dir = segment_path / "processed_log" / "CAN" / "speed"
             speed_t = np.load(speed_dir / "t")
-            self.speeds['t'].append(speed_t)
+            self.CAN_speeds['t'].append(speed_t)
             speed_value = np.load(speed_dir / "value")
-            self.speeds['value'].append(np.squeeze(speed_value))
+            self.CAN_speeds['value'].append(np.squeeze(speed_value))
             
             angle_dir = segment_path / "processed_log" / "CAN" / "steering_angle"
             angle_t = np.load(angle_dir / "t")
-            self.angles['t'].append(angle_t)
+            self.CAN_angles['t'].append(angle_t)
             angle_value = np.load(angle_dir / "value")
-            self.angles['value'].append(angle_value)
+            self.CAN_angles['value'].append(angle_value)
             
-            # Load in image time array and add to accumulator
+            # Load in global_pose arrays and add to accumulator
             frame_t_path = segment_path / "global_pose" / "frame_times"
             frame_t_array = np.load(frame_t_path)
             self.frame_t.append(frame_t_array)
+            
+            frame_pos_path = segment_path / "global_pose" / "frame_positions"
+            frame_pos_array = np.load(frame_pos_path)
+            self.frame_pos.append(frame_pos_array)
+            
+            frame_vel_path = segment_path / "global_pose" / "frame_velocities"
+            frame_vel_array = np.load(frame_vel_path)
+            self.frame_vel.append(frame_vel_array)
+            
+            frame_ori_path = segment_path / "global_pose" / "frame_orientations"
+            frame_ori_array = np.load(frame_ori_path)
+            self.frame_ori.append(frame_ori_array)
 
         # Concatenate all segments together
-        for array_dict in [self.speeds, self.angles]:
+        for array_dict in [self.CAN_speeds, self.CAN_angles]:
             array_dict['t'] = np.concatenate(array_dict['t'])
             array_dict['value'] = np.concatenate(array_dict['value'])
         self.frame_t = np.concatenate(self.frame_t)
+        self.frame_pos = np.concatenate(self.frame_pos)
+        self.frame_vel = np.concatenate(self.frame_vel)
+        self.frame_ori = np.concatenate(self.frame_ori)
     
     def sync_arrays(self):
         """
@@ -82,27 +110,30 @@ class Route:
         those timestamps.
         """
         # Get idx that corresponds to each frame time and mask for those values
-        speed_idx = find_nearest(self.speeds['t'], self.frame_t)
-        self.synced_speed_value = self.speeds['value'][speed_idx]
-        angle_idx = find_nearest(self.angles['t'], self.frame_t)
-        self.synced_angle_value = self.angles['value'][angle_idx]
+        speed_idx = find_nearest(self.CAN_speeds['t'], self.frame_t)
+        self.synced_speed_value = self.CAN_speeds['value'][speed_idx]
+        angle_idx = find_nearest(self.CAN_angles['t'], self.frame_t)
+        self.synced_angle_value = self.CAN_angles['value'][angle_idx]
 
     def save_data(self, save_path):
         """
         Create new folder for route under the save_path directory and 
         save newly synced data + video frames to folder.
         """
-        # Create save folder
+        # Create save folders
         route_save_path = save_path / self.route_time
-        route_save_path.mkdir()
+        #route_save_path.mkdir()
 
-        # Save synced arrays and timestamps
-        np.save(route_save_path / 'speeds.npy', self.synced_speed_value)
-        np.save(route_save_path / 'angles.npy', self.synced_angle_value)
-        np.save(route_save_path / 'timestamps.npy', self.frame_t)
+        # Save synced arrays and global_pose arrays
+        np.save(route_save_path / 'CAN_speeds.npy', self.synced_speed_value)
+        np.save(route_save_path / 'CAN_angles.npy', self.synced_angle_value)
+        np.save(route_save_path / 'frame_times.npy', self.frame_t)
+        np.save(route_save_path / 'frame_positions.npy', self.frame_pos)
+        np.save(route_save_path / 'frame_velocities.npy', self.frame_vel)
+        np.save(route_save_path / 'frame_orientations.npy', self.frame_ori)
 
         # Load in each video and save the frames
-        self.process_video(route_save_path)
+        #self.process_video(route_save_path)
 
     def process_video(self, route_save_path):
         """
@@ -146,7 +177,7 @@ def process_chunk(root_path, processed_dataset_path, chunk_id):
 def main(root_path, chunk_range):
     # Create directory for processed dataset
     processed_dataset_path = root_path / "processed_dataset"
-    processed_dataset_path.mkdir()
+    #processed_dataset_path.mkdir()
 
     # Loop through specified chunks
     with ProcessPoolExecutor() as executor:
