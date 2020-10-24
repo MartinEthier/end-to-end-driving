@@ -1,30 +1,25 @@
 {
 
     "model":{
-        
-
         "feature_extractor":{
             "name": "densenet201"
         },
         "sequence_model":{
-
         }
     },
     "training":{
         "epochs": 50,
-        "early_stop": 10,
         "gpu_id": 0
 
     },
     "dataset":{
         "root_path": "/media/watouser/Seagate_Backup/comma2k19/processed_dataset",
-        "seq_len": 10,
-        "size": 100000
-
+        "past_steps": 0,
+        "predict_steps": 60,
+        "size": 10000,
+        "predict_speed": false
     },
     "normalization":{
-        "max_speed": 47.0,
-        "max_angle": 400.0,
         "channel_mean": [0.485, 0.456, 0.406],
         "channel_std": [0.229, 0.224, 0.225]
     },
@@ -34,16 +29,16 @@
             "batch_size": 8,
             "shuffle": true,
             "validation_split": 0.1,
-            "num_workers": 2
+            "num_workers": 1
         }
     },
     "lr_scheduler":{
-        
+        "initial_lr": 1e-3
     },
     "optimizer":{
         "name": "Adam",
         "args":{
-
+            
         }
     }
 }
