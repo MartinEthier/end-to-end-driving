@@ -122,7 +122,7 @@ class Route:
         """
         # Create save folders
         route_save_path = save_path / self.route_time
-        #route_save_path.mkdir()
+        route_save_path.mkdir()
 
         # Save synced arrays and global_pose arrays
         np.save(route_save_path / 'CAN_speeds.npy', self.synced_speed_value)
@@ -133,7 +133,7 @@ class Route:
         np.save(route_save_path / 'frame_orientations.npy', self.frame_ori)
 
         # Load in each video and save the frames
-        #self.process_video(route_save_path)
+        self.process_video(route_save_path)
 
     def process_video(self, route_save_path):
         """
@@ -177,7 +177,7 @@ def process_chunk(root_path, processed_dataset_path, chunk_id):
 def main(root_path, chunk_range):
     # Create directory for processed dataset
     processed_dataset_path = root_path / "processed_dataset"
-    #processed_dataset_path.mkdir()
+    processed_dataset_path.mkdir()
 
     # Loop through specified chunks
     with ProcessPoolExecutor() as executor:
