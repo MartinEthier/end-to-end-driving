@@ -2,3 +2,4 @@ pytorch
 torchvision
 cudatoolkit=10.1
 matplotlib
+wandb
