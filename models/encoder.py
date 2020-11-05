@@ -2,7 +2,7 @@ import torch
 import torchvision
 
 
-class FeatureExtractor(torch.nn.Module):
+class Encoder(torch.nn.Module):
     """
     Initializes a pretrained ImageNet feature extractor from torchvision.models
     Input images have to be at least 224x224, scaled to be within 0 and 1, then normalized using:
@@ -13,18 +13,18 @@ class FeatureExtractor(torch.nn.Module):
     blocks of a resnet-50, and fine-tuning the rest.
     """
 
-    def __init__(self, model_name, input_size):
-        super(FeatureExtractor, self).__init__()
+    def __init__(self, cfg):
+        super(Encoder, self).__init__()
         
         # Initialize pretrained model
-        self.feature_extractor = getattr(torchvision.models, self.model_name)(pretrained=True)
+        self.encoder = getattr(torchvision.models, cfg['name'])(pretrained=True)
 
         # Remove last fully connected layer
-        modules = list(self.feature_extractor.children())[:-1]
-        self.feature_extractor = torch.nn.Sequential(*modules)
-        # for p in self.feature_extractor.parameters():
+        modules = list(self.encoder.children())[:-1]
+        self.encoder = torch.nn.Sequential(*modules)
+        # for p in self.encoder.parameters():
         #     p.requires_grad = False
 
     def forward(self, X):
-        return self.feature_extractor(X)
+        return self.encoder(X)
 
