@@ -10,15 +10,12 @@
     },
     "training": {
         "num_epochs": 50,
+        "log_iterations": 20,
         "gpu_id": 0
     },
     "dataset": {
         "dataset_file": "trainval_set.json",
         "predict_speed": false
-    },
-    "normalization": {
-        "channel_mean": [0.485, 0.456, 0.406],
-        "channel_std": [0.229, 0.224, 0.225]
     },
     "data_loader": {
         "batch_size": 4,
@@ -29,8 +26,6 @@
     },
     "optimizer": {
         "name": "Adam",
-        "args": {
-            "boi": "hmm"
-        }
+        "lr": 4e-3
     }
 }
