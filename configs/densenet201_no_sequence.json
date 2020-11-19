@@ -2,9 +2,12 @@
 
     "model":{
         "feature_extractor":{
-            "name": "densenet201"
+            "name": "resnet34"
         },
         "sequence_model":{
+            "hidden_size": 256,
+            "num_layers": 1,
+            
         }
     },
     "training":{
