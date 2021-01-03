@@ -4,6 +4,7 @@
 
 # Annoying ROS stuff
 import sys
+import os
 ros_path = '/opt/ros/kinetic/lib/python2.7/dist-packages'
 if ros_path in sys.path:
     sys.path.remove('/opt/ros/kinetic/lib/python2.7/dist-packages')
@@ -17,23 +18,34 @@ from concurrent.futures import ProcessPoolExecutor
 
 import numpy as np
 
+from utils import paths
+
 random.seed(0)
 
 
-def get_route_frames(route_path, future_steps, past_steps):
+def get_route_frames(route_path, future_steps, past_steps, outliers):
     image_files = []
     curvature_scores = []
 
     # Load route data arrays
     velocities = np.load(route_path / "frame_velocities.npy")
     steering_angles = np.load(route_path / "CAN_angles.npy")
+    orientations = np.load(route_path / "frame_orientations.npy")
+    positions = np.load(route_path / "frame_positions.npy")
 
-    # Get image paths
+    # Get image paths and sort by filename
     image_paths = list((route_path / 'images').glob('*.jpg'))
+    image_paths.sort(key=lambda path: path.stem)
 
     # Skip route if too few images to make a sequence
     if len(image_paths) < past_steps + future_steps + 1:
         return ([], [])
+
+    # Remove outliers
+    for route_name in outliers:
+        if route_path.stem == route_name:
+            frame_range = outliers[route_name]
+            del image_paths[frame_range[0]:frame_range[1]+1]
 
     # Remove the frames that don't have enough previous or future frames
     del image_paths[-future_steps:]
@@ -45,12 +57,31 @@ def get_route_frames(route_path, future_steps, past_steps):
         
         # Remove examples where the car is going backwards
         future_x_vel = velocities[frame_id + 1 : frame_id + 1 + future_steps, 0]
-        if np.any(future_x_vel <= 0):
+        if np.any(future_x_vel < 0):
             continue
             
         # Remove examples with an avg speed below 10 m/s
         avg_speed = np.mean(np.linalg.norm(velocities[frame_id + 1 : frame_id + 1 + future_steps], axis=1))
         if avg_speed < 10:
+            continue
+            
+        # Convert positions to reference frame
+        local_path = paths.get_local_path(positions, orientations, frame_id)
+        
+        # Get full path
+        full_path = local_path[frame_id - past_steps : frame_id + 1 + future_steps]
+        
+        # Remove examples where the path has a glitch in it by getting path gradients and finding spikes
+        grads = np.mean(np.gradient(full_path, axis=0), axis=1)
+        grad_diffs = np.abs(np.diff(grads))
+        if np.any(grad_diffs > 0.05):
+            continue
+        
+        # Get future path
+        future_x_path = local_path[frame_id + 1 : frame_id + 1 + future_steps, 0]
+        
+        # Remove examples with any negative X positions
+        if np.any(future_x_path < 0):
             continue
             
         # Get future steering angles
@@ -59,7 +90,7 @@ def get_route_frames(route_path, future_steps, past_steps):
         # Get curvature score by taking RMSE between steering angles through path and initial steering angle
         ref_angle = steering_angles[frame_id]
         curvature_score = np.sqrt(np.sum((future_angles-ref_angle)**2) / future_angles.shape[0])
-        
+
         image_files.append(image_path)
         curvature_scores.append(curvature_score)
 
@@ -67,10 +98,15 @@ def get_route_frames(route_path, future_steps, past_steps):
 
 
 def main(args):
-    # Define route for test set
+    # Get routes defined for test set
     test_json_path = Path(__file__).parent / 'dataset_lists/test_set_routes.json'
     with test_json_path.open('r') as fr:
         test_routes = json.load(fr)['test_routes']
+        
+    # Get outliers
+    outliers_path = Path(__file__).parent / 'dataset_lists/outliers.json'
+    with outliers_path.open('r') as fr:
+        outliers = json.load(fr)['outliers']
 
     # Accumulate list of paths to each image frame in dataset
     image_files = []
@@ -79,13 +115,14 @@ def main(args):
 
     # Loop through specified chunks
     with ProcessPoolExecutor() as executor:
-        results = executor.map(get_route_frames, route_paths, itertools.repeat(args.future_steps), itertools.repeat(args.past_steps))
+        results = executor.map(get_route_frames, route_paths, itertools.repeat(args.future_steps), itertools.repeat(args.past_steps), itertools.repeat(outliers))
     for result in results:
         image_files.extend(result[0])
         curvature_scores.extend(result[1])
 
     curvature_array = np.array(curvature_scores)
 
+    #print(np.argwhere(np.isnan(curvature_array)))
     print(f"Dataset size before binning: {curvature_array.shape[0]}")
 
     dataset_files = []
@@ -124,6 +161,8 @@ def main(args):
     # Convert Path to str and save to json
     arg_dict = vars(args)
     arg_dict['root_dir'] = str(arg_dict['root_dir'])
+    arg_dict['train_size'] = len(train_set)
+    arg_dict['val_size'] = len(val_set)
     save_data = {'args': arg_dict, 'train_set': train_set, 'val_set': val_set}
     save_json_path = Path(__file__).parent / 'dataset_lists/trainval_set.json'
     with save_json_path.open('w') as fs:
