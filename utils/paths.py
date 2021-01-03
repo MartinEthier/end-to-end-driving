@@ -2,6 +2,8 @@ import numpy as np
 import cv2
 
 import lib.orientation as orient
+import lib.camera as cam
+from lib.camera import img_from_device, denormalize
 
 
 def get_local_path(positions, orientations, reference_idx):
@@ -11,6 +13,36 @@ def get_local_path(positions, orientations, reference_idx):
     positions_local = np.einsum('ij,kj->ki', local_from_ecef, positions - positions[reference_idx])
     return positions_local
 
+def draw_path(device_path, img, width=0.5, height=1, fill_color=(128,0,255), line_color=(0,255,0)):
+    device_path_l = device_path + np.array([0, 0, height])
+    device_path_r = device_path + np.array([0, 0, height])
+    device_path_l[:,1] -= width
+    device_path_r[:,1] += width
 
+    img_points_norm_l = cam.img_from_device(device_path_l)
+    img_points_norm_r = cam.img_from_device(device_path_r)
+    img_pts_l = cam.denormalize(img_points_norm_l)
+    img_pts_r = cam.denormalize(img_points_norm_r)
 
+    # filter out things rejected along the way
+    valid = np.logical_and(np.isfinite(img_pts_l).all(axis=1), np.isfinite(img_pts_r).all(axis=1))
+    img_pts_l = img_pts_l[valid].astype(int)
+    img_pts_r = img_pts_r[valid].astype(int)
 
+    for i in range(1, len(img_pts_l)):
+        u1,v1,u2,v2 = np.append(img_pts_l[i-1], img_pts_r[i-1])
+        u3,v3,u4,v4 = np.append(img_pts_l[i], img_pts_r[i])
+        pts = np.array([[u1, v1], [u2, v2], [u4, v4], [u3, v3]], np.int32).reshape((-1, 1, 2))
+        cv2.fillPoly(img, [pts], fill_color)
+        cv2.polylines(img, [pts], True, line_color)
+        
+def plot_path(path):
+    pass
+
+def scale(path, factors):
+    scaling_factor = np.array([factors['x'], factors['y'], factors['z']])
+    path /= scaling_factor
+    
+def descale(path, factors):
+    scaling_factor = np.array([factors['x'], factors['y'], factors['z']])
+    path *= scaling_factor
