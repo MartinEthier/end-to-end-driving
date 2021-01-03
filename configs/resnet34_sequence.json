@@ -3,29 +3,38 @@
         "encoder": {
             "name": "resnet34"
         },
-        "sequence_model": {
-            "hidden_size": 256,
-            "num_layers": 1
+        "decoder": {
+            "name": "LSTMDecoder",
+            "params": {
+                "hidden_size": 512,
+                "num_layers": 1
+            }
         }
     },
     "training": {
         "num_epochs": 50,
         "log_iterations": 20,
-        "gpu_id": 0
+        "gpu_id": 1,
+        "checkpoint_dir": "/mnt/sda/datasets/comma2k19/checkpoints"
     },
     "dataset": {
         "dataset_file": "trainval_set.json",
         "predict_speed": false
     },
-    "data_loader": {
-        "batch_size": 4,
-        "num_workers": 2
+    "train_loader": {
+        "batch_size": 19,
+        "num_workers": 8
     },
-    "lr_scheduler": {
-        "initial_lr": 1e-3
+    "val_loader": {
+        "batch_size": 32,
+        "num_workers": 8
+    },
+    "scheduler": {
+        "step_size": 5,
+        "gamma": 0.8
     },
     "optimizer": {
         "name": "Adam",
-        "lr": 4e-3
+        "lr": 0.01
     }
 }
