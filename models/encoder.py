@@ -22,9 +22,21 @@ class Encoder(torch.nn.Module):
         # Remove last fully connected layer
         modules = list(self.encoder.children())[:-1]
         self.encoder = torch.nn.Sequential(*modules)
-        # for p in self.encoder.parameters():
-        #     p.requires_grad = False
+        
+        self.fc = torch.nn.Linear(in_features=512, out_features=125, bias=False)
+        self.bn = torch.nn.BatchNorm1d(num_features=125)
+
+    def replace_modules(model):
+        for child_name, child in model.named_children():
+            if isinstance(child, nn.ReLU):
+                setattr(model, child_name, nn.Softplus())
+            else:
+                convert_relu_to_softplus(child)    
 
     def forward(self, X):
-        return self.encoder(X)
+        X = self.encoder(X) # (batch_size, 512, 1, 1)
+        X = self.fc(torch.squeeze(X)) # (batch_size, 125)
+        X = self.bn(X)
+        X = torch.nn.LeakyReLU()(X)
+        return X
 
