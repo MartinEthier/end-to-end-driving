@@ -6,22 +6,20 @@ import cv2
 import numpy as np
 from PIL import Image
 
-from utils.paths import get_local_path
+from utils import paths
 
 
 class CommaDataset(torch.utils.data.Dataset):
     """
-
     """
 
-    def __init__(self, cfg, split, img_transform, data_transform=None):
+    def __init__(self, cfg, split, img_transform):
         """
         dataset_cfg:
         """
         for key, value in cfg.items():
             setattr(self, key, value)
         self.img_transform = img_transform
-        self.data_transform = data_transform
         
         # Load in trainval json
         json_path = Path(__file__).parent / 'dataset_lists' / self.dataset_file
@@ -29,14 +27,13 @@ class CommaDataset(torch.utils.data.Dataset):
             trainval_dict = json.load(fr)
         self.args = trainval_dict['args']
         
-        # Set files and dataset size based on split
-        train_size = int(self.args['dataset_size'] * self.args['trainval_split'])
+        # Set files and dataset size
         if split == 'train':
-            self.dataset_size = train_size
-            self.frame_paths = [Path(f_path) for f_path in trainval_dict['train_set']]
+            self.dataset_size = self.args['train_size']
+            self.frame_paths = [Path(self.args['root_dir']) / f_path for f_path in trainval_dict['train_set'] if (Path(self.args['root_dir']) / f_path).exists()]
         elif split == 'val':
-            self.dataset_size = self.args['dataset_size'] - train_size
-            self.frame_paths = [Path(f_path) for f_path in trainval_dict['val_set']]
+            self.dataset_size = self.args['val_size']
+            self.frame_paths = [Path(self.args['root_dir']) / f_path for f_path in trainval_dict['val_set'] if (Path(self.args['root_dir']) / f_path).exists()]
         else:
             raise ValueError("Invalid split string", self.split)
 
@@ -54,7 +51,7 @@ class CommaDataset(torch.utils.data.Dataset):
         positions = np.load(route_path / "frame_positions.npy")
         
         # Convert positions to reference frame
-        local_path = get_local_path(positions, orientations, frame_id)
+        local_path = paths.get_local_path(positions, orientations, frame_id)
         
         # Divide data into previous and future arrays
         future_path = local_path[frame_id + 1 : frame_id + 1 + self.args['future_steps']]
@@ -85,14 +82,10 @@ class CommaDataset(torch.utils.data.Dataset):
             
             # Divide data into previous and future arrays
             future_speeds = speeds[frame_id + 1 : frame_id + 1 + self.args['future_steps']]
-            previous_speeds = speeds[frame_id - self.args['past_steps'] : frame_id + 1]
+            previous_speeds = speeds[frame_id - self.args['past_steps'] : frame_id]
             
             sample['label_speed'] = torch.from_numpy(future_speeds)
             sample['prev_speed'] = torch.from_numpy(previous_speeds)
-            
-        # Apply transforms to path and speed arrays
-        if self.data_transform is not None:
-            sample = self.data_transform(sample)
 
         return sample
 
