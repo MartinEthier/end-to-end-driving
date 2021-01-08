@@ -1,5 +1,6 @@
 import numpy as np
 import cv2
+import plotly.express as px
 
 import lib.orientation as orient
 import lib.camera as cam
@@ -11,6 +12,7 @@ def get_local_path(positions, orientations, reference_idx):
     ecef_from_local = orient.rot_from_quat(orientations[reference_idx])
     local_from_ecef = ecef_from_local.T
     positions_local = np.einsum('ij,kj->ki', local_from_ecef, positions - positions[reference_idx])
+
     return positions_local
 
 def draw_path(device_path, img, width=0.5, height=1, fill_color=(128,0,255), line_color=(0,255,0)):
@@ -35,14 +37,14 @@ def draw_path(device_path, img, width=0.5, height=1, fill_color=(128,0,255), lin
         pts = np.array([[u1, v1], [u2, v2], [u4, v4], [u3, v3]], np.int32).reshape((-1, 1, 2))
         cv2.fillPoly(img, [pts], fill_color)
         cv2.polylines(img, [pts], True, line_color)
-        
-def plot_path(path):
-    pass
 
-def scale(path, factors):
-    scaling_factor = np.array([factors['x'], factors['y'], factors['z']])
-    path /= scaling_factor
-    
-def descale(path, factors):
-    scaling_factor = np.array([factors['x'], factors['y'], factors['z']])
-    path *= scaling_factor
+def plot_3d_paths(label_path, pred_path):
+    # Plot both the label path and predicted path in a 3D plot
+    fig = px.line_3d(
+        x=np.concatenate([label_path[:, 0], pred_path[:, 0]]),
+        y=np.concatenate([label_path[:, 1], pred_path[:, 1]]),
+        z=np.concatenate([label_path[:, 2], pred_path[:, 2]]),
+        color=['label'] * label_path.shape[0] + ['pred'] * pred_path.shape[0]
+    )
+
+    return fig
