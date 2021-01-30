@@ -1,6 +1,7 @@
 import numpy as np
 import cv2
 import plotly.express as px
+from scipy import interpolate
 
 import lib.orientation as orient
 import lib.camera as cam
@@ -48,3 +49,15 @@ def plot_3d_paths(label_path, pred_path):
     )
 
     return fig
+
+def smooth_path(path):
+    # Interpolate path
+    tck, u = interpolate.splprep([path[:, 0], path[:, 1], path[:, 2]], s=2)
+    x_knots, y_knots, z_knots = interpolate.splev(tck[0], tck)
+    u_fine = np.linspace(0, 1, path.shape[0])
+    x_fine, y_fine, z_fine = interpolate.splev(u_fine, tck)
+
+    # Reconcat
+    smooth_path = np.concatenate((x_fine[:, np.newaxis], y_fine[:, np.newaxis], z_fine[:, np.newaxis]), axis=1)
+    
+    return smooth_path
