@@ -23,19 +23,13 @@ class Encoder(torch.nn.Module):
         modules = list(self.encoder.children())[:-1]
         self.encoder = torch.nn.Sequential(*modules)
         
-        self.fc = torch.nn.Linear(in_features=512, out_features=125, bias=False)
+        self.fc = torch.nn.Linear(in_features=cfg['feature_len'], out_features=125, bias=False)
         self.bn = torch.nn.BatchNorm1d(num_features=125)
 
-    def replace_modules(model):
-        for child_name, child in model.named_children():
-            if isinstance(child, nn.ReLU):
-                setattr(model, child_name, nn.Softplus())
-            else:
-                convert_relu_to_softplus(child)    
-
     def forward(self, X):
-        X = self.encoder(X) # (batch_size, 512, 1, 1)
-        X = self.fc(torch.squeeze(X)) # (batch_size, 125)
+        X = self.encoder(X) # (batch_size, feature_len, 1, 1)
+        X = torch.reshape(X, X.shape[0:2]) # (batch_size, feature_len)
+        X = self.fc(X) # (batch_size, 125)
         X = self.bn(X)
         X = torch.nn.LeakyReLU()(X)
         return X

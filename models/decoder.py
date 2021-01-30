@@ -28,8 +28,8 @@ class LSTMDecoder(torch.nn.Module):
         self.fc_out = torch.nn.Linear(in_features=128, out_features=40*3)
 
     def forward(self, X):
-        _, (X, _) = self.lstm(X) # Get last hidden state
-        X = self.fc1(torch.squeeze(X))
+        _, (X, _) = self.lstm(X) # Get last hidden state, (1, batch_size, hidden_size)
+        X = self.fc1(torch.squeeze(X, 0))
         X = self.bn1(X)
         X = torch.nn.LeakyReLU()(X)
         X = self.fc2(X)
