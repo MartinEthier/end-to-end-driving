@@ -20,12 +20,18 @@ python data/split_dataset.py <path_to_preprocessed_dataset> -f <number_of_future
 ```
 This script will filter out paths where the car goes backwards and has an average speed of less than 10 m/s. Then it calculates a curvature score for the path based on the steering angle throughout the path. The final dataset is sampled in such a way that the dataset is more balanced based on this curvature score.
 
-## Tasks
-- [x] Preprocess dataset script
-- [x] Generate train/val/test lists
-- [ ] PyTorch Dataset class setup
-- [ ] Transforms
-- [ ] Simple CNN model
-- [ ] Create training script
-- [ ] Setup W&B or Tensorboard
-- [ ] LSTM+CNN model
+## Training
+To train, simply run training script with the argument being the path to the config file under the configs directory. The config used to train the final model is configs/resnet34_sequence.json:
+```bash
+python train.py <path_to_config>
+```
+
+## Logging
+All logging was done through Weights and Biases. See the final loss curves below:  
+
+![trainloss](docs/best_model_train_loss.png)
+![valloss](docs/best_model_val_loss.png)
+
+## Example predictions on test set
+![demo1](docs/demo_video_1.gif)
+![demo2](docs/demo_video_2.gif)
