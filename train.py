@@ -7,6 +7,7 @@ from pathlib import Path
 
 import torch
 from torch.utils.data import DataLoader
+from torch.cuda import amp
 from torchvision.transforms import Compose, Resize, ToTensor, Normalize
 import numpy as np
 import cv2
@@ -18,7 +19,7 @@ from models.encoder import Encoder
 from models.decoder import Decoder
 from models.e2e_model import End2EndNet
 from utils import paths, logging
-from utils.losses import finite_diff
+from utils.losses import grad_l1_loss
 
 
 def main(cfg):
@@ -30,7 +31,8 @@ def main(cfg):
     checkpoint_dir.mkdir(parents=True)
     
     # Use gpu if available
-    device = torch.device('cuda:' + str(cfg['training']['gpu_id']) if torch.cuda.is_available() else 'cpu')
+    #gpu_str = ",".join([str(gid) for gid in cfg['training']['gpu_ids']])
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print(f"Using device: {device}")
     
     # Optimizes training speed
@@ -59,19 +61,28 @@ def main(cfg):
                               pin_memory=True)
     
     print("Initializing model and loss...")
-    # Init model
+    # Init model and set multi-gpu if needed
     encoder = Encoder(cfg['model']['encoder'])
     decoder = Decoder(cfg['model']['decoder'])
-    e2e_net = End2EndNet(encoder, decoder).to(device)
+    e2e_net = End2EndNet(encoder, decoder)
+    if torch.cuda.device_count() > 1:
+        print(f"Using multiple GPUs")
+        e2e_net = torch.nn.DataParallel(e2e_net)
+    e2e_net.to(device)
     wandb.watch(e2e_net)
-    
+
     # Init loss and optimizer
     l1_loss = torch.nn.L1Loss()
-    l2_loss = torch.nn.MSELoss()
-    optimizer = torch.optim.Adam(e2e_net.parameters(), lr=cfg['optimizer']['lr'])
-    scheduler = torch.optim.lr_scheduler.StepLR(optimizer, 
-                                                step_size=cfg['scheduler']['step_size'], 
-                                                gamma=cfg['scheduler']['gamma'])
+    optimizer = torch.optim.SGD(e2e_net.parameters(), lr=0.01, momentum=0.9, weight_decay=1e-4)
+    scheduler = torch.optim.lr_scheduler.OneCycleLR(
+        optimizer,
+        2e-1,
+        epochs=cfg['training']['num_epochs'],
+        steps_per_epoch=len(train_loader)
+    )
+    
+    # Create a GradScaler once at the beginning of training.
+    scaler = amp.GradScaler()
     
     global_train_step = 0
     global_val_step = 0
@@ -80,7 +91,6 @@ def main(cfg):
         # Training loop
         print(f"\n=== Epoch {epoch + 1} ===")
         running_train_loss = 0.0
-        train_steps = 0
         log_tensors = {"img": None, "label": None, "output": None}
         e2e_net.train()
         for i_batch, sample_batched in enumerate(tqdm(train_loader, desc='Training')):
@@ -93,24 +103,19 @@ def main(cfg):
             # Combine last 2 dims in label to match model output
             label = label_path.view(label_path.shape[0], -1)
             
-            # Forward pass
-            model_output = e2e_net(frames, prev_path) # (8, future*3)
-            
-#             label_grads = finite_diff(label_path)
-#             output_reshaped = model_output.view(label_path.shape)
-#             output_grads = finite_diff(output_reshaped)
-            
-#             path_loss = l1_loss(model_output, label)
-#             grad_loss = l1_loss(output_grads, label_grads)
-#             gamma = 0.9
-#             loss = gamma * path_loss + (1.0 - gamma) * grad_loss
-            loss = l1_loss(model_output, label)
+            # Run the forward pass with autocasting
+            with amp.autocast():
+                model_output = e2e_net(frames, prev_path) # (8, future*3)
+                loss = l1_loss(label, model_output)
             
             running_train_loss += loss.item()
             
             # Backward and optimize
-            loss.backward()
-            optimizer.step()
+            scaler.scale(loss).backward()
+            scaler.step(optimizer)
+
+            # Updates the scale for next iteration.
+            scaler.update()
             
             # Track metrics
             if i_batch % cfg['training']['log_iterations']:
@@ -120,17 +125,22 @@ def main(cfg):
                 log_tensors['label'] = label[idx].detach().cpu().numpy()
                 log_tensors['output'] = model_output[idx].detach().cpu().numpy()
 
-                wandb.log({'train_loss': loss, 'global_step': global_train_step})
+                wandb.log({
+                    'train_loss': loss,
+                    'lr': scheduler.get_last_lr()[0],
+                    'global_step': global_train_step
+                })
                 
             global_train_step += 1
-            train_steps += 1
+            
+            scheduler.step()
 
         # Generate log images and plots from last batch
-        label_img, pred_img, fig = logging.gen_logs(log_tensors, cfg['dataset']['norm'])
+        label_img, pred_img, fig = logging.gen_logs(log_tensors)
         
         # Log train epoch loss, images and plots
         wandb.log({
-            'train_loss_epoch': running_train_loss / train_steps,
+            'train_loss_epoch': running_train_loss / len(train_loader),
             'epoch': epoch,
             'train_labels': wandb.Image(label_img, caption=f"label"),
             'train_preds': wandb.Image(pred_img, caption=f"pred"),
@@ -139,7 +149,6 @@ def main(cfg):
 
         # Validation loop
         running_val_loss = 0.0
-        val_steps = 0
         e2e_net.eval()
         with torch.no_grad():
             for i_batch, sample_batched in enumerate(tqdm(val_loader, desc='Validation')):
@@ -150,18 +159,9 @@ def main(cfg):
                 # Combine last 2 dims in label to match model output
                 label = label_path.view(label_path.shape[0], -1)
 
-                # Pass through e2e model
+                # Forward pass
                 model_output = e2e_net(frames, prev_path)
-                
-#                 label_grads = finite_diff(label_path)
-#                 output_reshaped = model_output.view(label_path.shape)
-#                 output_grads = finite_diff(output_reshaped)
-                
-#                 path_loss = l1_loss(model_output, label)
-#                 grad_loss = l1_loss(output_grads, label_grads)
-#                 gamma = 0.9
-#                 loss = gamma * path_loss + (1.0 - gamma) * grad_loss
-                loss = l1_loss(model_output, label)
+                loss = l1_loss(label, model_output)
 
                 running_val_loss += loss.item()
                 
@@ -176,7 +176,6 @@ def main(cfg):
                     wandb.log({'val_loss': loss, 'global_step': global_val_step})
 
                 global_val_step += 1
-                val_steps += 1
             
         # Save model checkpoint
         torch.save(
@@ -190,20 +189,18 @@ def main(cfg):
         )
             
         # Generate log images and plots from last batch
-        label_img, pred_img, fig = logging.gen_logs(log_tensors, cfg['dataset']['norm'])
+        label_img, pred_img, fig = logging.gen_logs(log_tensors)
 
         # Log val epoch loss, LR, and log images/plots
         wandb.log(
             {
-            'val_loss_epoch': running_val_loss / val_steps,
+            'val_loss_epoch': running_val_loss / len(val_loader),
             'epoch': epoch,
-            'lr': scheduler.get_last_lr()[0],
             'val_labels': wandb.Image(label_img, caption=f"label"),
             'val_preds': wandb.Image(pred_img, caption=f"pred"),
             'val_3D_plots': wandb.Plotly(fig)
             }
         )
-        scheduler.step()
 
 
 if __name__=="__main__":
