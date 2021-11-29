@@ -39,5 +39,6 @@ All logging was done through Weights and Biases. See the final loss curves below
 ## Future Improvements
 - Better backbone (EfficientNet)
 - More hyperparameter tuning
+- Train for longer (loss still improving at the end of runs)
 - Train on a larger portion of the dataset
 - Use active learning to select best examples from the full dataset to train on
