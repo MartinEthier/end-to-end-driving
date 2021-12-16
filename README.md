@@ -37,7 +37,7 @@ All logging was done through Weights and Biases. See the final loss curves below
 ![demo2](docs/demo_video_2.gif)
 
 ## Future Things To Try
-- Better backbone (EfficientNet)
+- Bigger and better backbone (EfficientNet)
 - More hyperparameter tuning
 - Train for longer (loss still improving at the end of runs)
 - Train on a larger portion of the dataset
