@@ -41,5 +41,6 @@ All logging was done through Weights and Biases. See the final loss curves below
 - More hyperparameter tuning
 - Train for longer (loss still improving at the end of runs)
 - Train on a larger portion of the dataset
+- Predict distributions using mixture density networks instead of directly predicting the values
 - Use active learning to select best examples from the full dataset to train on
 - Try training world models for simulation
