@@ -6,13 +6,6 @@ control models. The script also organizes the global frame times, positions,
 velocities, and orientations to be used with the comma library to generate paths
 for end-to-end planner training.
 """
-
-# Annoying ROS stuff
-import sys
-ros_path = '/opt/ros/kinetic/lib/python2.7/dist-packages'
-if ros_path in sys.path:
-    sys.path.remove('/opt/ros/kinetic/lib/python2.7/dist-packages')
-
 from pathlib import Path
 import argparse
 from concurrent.futures import ProcessPoolExecutor
@@ -37,8 +30,9 @@ def find_nearest(arr, target):
 
 
 class Route:
-    def __init__(self, route_path):
+    def __init__(self, route_path, frame_size):
         self.route_path = route_path
+        self.frame_size = frame_size
 
         # Stem of path is formatted: vehicle_id|route_timestamp. Split it to get timestamp
         self.route_time = route_path.stem.split('|')[-1]
@@ -137,7 +131,7 @@ class Route:
 
     def process_video(self, route_save_path):
         """
-        Go through video frames and save each as a png to the image
+        Go through video frames and save each as a jpg to the image
         directory. Name each according to index in timestamp array.
         """
         # Create images directory
@@ -153,28 +147,31 @@ class Route:
             while cap.isOpened():
                 ret, frame = cap.read()
                 if ret:
+                    # Resize frame to target size
+                    resized = cv2.resize(frame, self.frame_size, interpolation=cv2.INTER_AREA)
+
                     # Zero pad frame_count and save frame
                     img_path = img_dir / (str(frame_count).zfill(6) + '.jpg')
-                    cv2.imwrite(str(img_path), frame)
+                    cv2.imwrite(str(img_path), resized)
                     frame_count += 1
                 else:
                     break
             cap.release()
 
 
-def process_chunk(root_path, processed_dataset_path, chunk_id):
+def process_chunk(root_path, processed_dataset_path, frame_size, chunk_id):
     # Loop through each route in the chunk
     chunk_path = root_path / f"Chunk_{chunk_id}"
     route_paths = [f for f in chunk_path.iterdir() if f.is_dir()]
     for route_path in route_paths:
         # Create a Route object, load and sync the data, then save
-        route = Route(route_path)
+        route = Route(route_path, frame_size)
         print(f"Processing route {route.route_time}...")
         route.load_data()
         route.sync_arrays()
         route.save_data(processed_dataset_path)
 
-def main(root_path, chunk_range):
+def main(root_path, chunk_range, frame_size):
     # Create directory for processed dataset
     processed_dataset_path = root_path / "processed_dataset"
     processed_dataset_path.mkdir()
@@ -182,15 +179,16 @@ def main(root_path, chunk_range):
     # Loop through specified chunks
     with ProcessPoolExecutor() as executor:
         for chunk_id in range(chunk_range[0], chunk_range[1] + 1):
-            executor.submit(process_chunk, root_path, processed_dataset_path, chunk_id)
+            executor.submit(process_chunk, root_path, processed_dataset_path, frame_size, chunk_id)
         
 
 if __name__=="__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument('root_dir', help='Root directory of the comma2k19 dataset')
-    parser.add_argument('-c', '--chunk_range', type=int, nargs=2, default=[3, 10], help='Which range of chunks to process (default is 3-10 for Honda Civic data)')
+    parser.add_argument('root_dir', help='Root directory of the comma2k19 dataset.')
+    parser.add_argument('-s', '--frame_size', type=int, nargs=2, default=[384, 288], help='Size to reshape all the frames to.')
+    parser.add_argument('-c', '--chunk_range', type=int, nargs=2, default=[3, 10], help='Which range of chunks to process (default is 3-10 for Honda Civic data).')
     args = parser.parse_args()
 
     root_path = Path(args.root_dir).expanduser()
 
-    main(root_path, args.chunk_range)
+    main(root_path, args.chunk_range, args.frame_size)

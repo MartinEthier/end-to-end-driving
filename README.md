@@ -6,12 +6,12 @@ Repository to train end-to-end neural nets on the [comma2k19 dataset](https://gi
 Setup a conda environment with the libraries specified in requirements.txt
 
 ## Dataset setup
-1. Download the dataset from [here](https://academictorrents.com/details/65a2fbc964078aff62076ff4e103f18b951c5ddb) using the wget command and then run a command-line torrent client on the downloaded file to download the full dataset (I used rTorrent).
+1. Download the dataset from [here](https://academictorrents.com/details/65a2fbc964078aff62076ff4e103f18b951c5ddb) using the wget command and then run a command-line torrent client on the downloaded file to download the full dataset (I used rTorrent). The directory structure should be the root directory with all the Chunk folders directly below.
 2. Run the pre-processing script as follows. Chunk range is set to 3-10 by default (Civic). Set to 1-2 for Rav4.
 ```bash
-python preprocess_dataset.py <path_to_comma2k19_folder> --chunk_range <first_chunk> <last_chunk>
+python preprocess_dataset.py <path_to_comma2k19_folder> --chunk_range <first_chunk> <last_chunk> --frame_size <width> <height>
 ```
-This script groups all data into folders corresponding to routes instead of having chunks and segments. For each route, it saves all image frames as jpgs and saves numpy arrays for each route corresponding to global pose frame times, frame positions, frame velocities, and frame orientations as well as synced CAN bus speeds and steering angles. The CAN bus data is to be used as labels for end-to-end control and the global pose data is to be used to generate paths for end-to-end planning labels.
+This script groups all data into folders corresponding to routes instead of having chunks and segments. For each route, it resizes and saves all image frames as jpgs and saves numpy arrays for each route corresponding to global pose frame times, frame positions, frame velocities, and frame orientations as well as synced CAN bus speeds and steering angles. The CAN bus data is to be used as labels for end-to-end control and the global pose data is to be used to generate paths for end-to-end planning labels.
 
 ## Generate train/val/test lists
 Specify the routes to be used for the test set in data/dataset_lists/test_set_routes.json. Then, run the split_dataset script to generate the file splits for the training and validation sets:
@@ -37,8 +37,12 @@ All logging was done through Weights and Biases. See the final loss curves below
 ![demo2](docs/demo_video_2.gif)
 
 ## Future Things To Try
-- Bigger and better backbone (EfficientNet)
-- More hyperparameter tuning
+- Bigger and better backbone (EfficientNet) -> timm
+- More hyperparameter tuning -> wandb sweep
+- Load frame straight from video file to avoid having to convert to JPGs (low on disk space)
+- Train on full dataset for X iterations instead of subset for X epochs
+- Try figuring a way to make the path prediction easier (maybe takes speed into account)
+- Get rid of test set and instead just do train+val where val is a small number of routes
 - Train for longer (loss still improving at the end of runs)
 - Train on a larger portion of the dataset
 - Predict distributions using mixture density networks instead of directly predicting the values
