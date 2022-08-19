@@ -37,14 +37,24 @@ All logging was done through Weights and Biases. See the final loss curves below
 ![demo2](docs/demo_video_2.gif)
 
 ## Future Things To Try
-- Bigger and better backbone (EfficientNet) -> timm
+- Bigger and better backbone (ConvNext, EfficientNetV2, ...) using timm
 - More hyperparameter tuning -> wandb sweep
-- Load frame straight from video file to avoid having to convert to JPGs (low on disk space)
-- Train on full dataset for X iterations instead of subset for X epochs
-- Try figuring a way to make the path prediction easier (maybe takes speed into account)
-- Get rid of test set and instead just do train+val where val is a small number of routes
-- Train for longer (loss still improving at the end of runs)
-- Train on a larger portion of the dataset
-- Predict distributions using mixture density networks instead of directly predicting the values
-- Use active learning to select best examples from the full dataset to train on
+- Try longer sequences using lstm
+- Write a script to display predictions on validation set by order of highest loss
+- Weigh path points from later timesteps more than later since they are more difficult
+- Initialize the final fc layer to the mean of all the labels to avoid hockey stick loss
+- Use a lane detection model to remove lane changes
+- Or train a classifier to identify sections where we are making lane changes, left turns, right turns, etc... to label desire
+- Try experimenting with L1/L2 loss and gradient L1/L2 loss
+- Try adding more data aug (lens distortion, noise) -> maybe switch to albumentations (MotionBlur, GaussNoise, ColorJitter, )
+- Predict distributions using a gaussian misture model (GMM) -> mixture density networks (https://github.com/sagelywizard/pytorch-mdn)
+- https://deep-and-shallow.com/2021/03/20/mixture-density-networks-probabilistic-regression-for-uncertainty-estimation/
+- Try sequence model to predict each timestep individually (see https://storage.googleapis.com/waymo-uploads/files/research/MotionPred/MotionPrediction_MTRA.pdf)
+- Predict each timestep relative to previous timestep (predict delta vector at each timestep) instead of full path. Smaller overall magnitude of predictions -> more stable learning, can initialize single bias for seq model.
 - Try training world models for simulation
+
+## New dataset
+- Predict 30 frames in the future (1.5 seconds @ 20 fps)
+- Try no past frames to start, then try 2, 4, 8
+- No test set, just set aside some routes for val set
+- Use full dataset (might have to balance by curvature)

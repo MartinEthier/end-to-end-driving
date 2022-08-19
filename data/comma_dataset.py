@@ -5,24 +5,28 @@ import torch
 import cv2
 import numpy as np
 from PIL import Image
+from torchvision import io
+from torchvision.transforms import ToTensor
 
-from utils import paths
+from utils import paths, logging
 
 
 class CommaDataset(torch.utils.data.Dataset):
     """
     """
-
-    def __init__(self, cfg, split, img_transform):
+    def __init__(self, cfg, split, img_transforms, full_transforms):
         """
-        dataset_cfg:
+        cfg:
         """
-        for key, value in cfg.items():
-            setattr(self, key, value)
-        self.img_transform = img_transform
+        self.return_curvature = False
+        self.cfg = cfg['dataset']
+        self.img_transforms = img_transforms
+        self.full_transforms = full_transforms
+        
+        self.to_tensor = ToTensor()
         
         # Load in trainval json
-        json_path = Path(__file__).parent / 'dataset_lists' / self.dataset_file
+        json_path = Path(__file__).parent / 'dataset_lists' / self.cfg['dataset_file']
         with json_path.open('r') as fr:
             trainval_dict = json.load(fr)
         self.args = trainval_dict['args']
@@ -30,12 +34,14 @@ class CommaDataset(torch.utils.data.Dataset):
         # Set files and dataset size
         if split == 'train':
             self.dataset_size = self.args['train_size']
-            self.frame_paths = [Path(self.args['root_dir']) / f_path for f_path in trainval_dict['train_set'] if (Path(self.args['root_dir']) / f_path).exists()]
+            self.frame_paths = [Path(self.args['root_dir']) / p[0] for p in trainval_dict['train_files']]
+            self.curvatures = [p[1] for p in trainval_dict['train_files']]
         elif split == 'val':
             self.dataset_size = self.args['val_size']
-            self.frame_paths = [Path(self.args['root_dir']) / f_path for f_path in trainval_dict['val_set'] if (Path(self.args['root_dir']) / f_path).exists()]
+            self.frame_paths = [Path(self.args['root_dir']) / p[0] for p in trainval_dict['val_files']]
+            self.curvatures = None
         else:
-            raise ValueError("Invalid split string", self.split)
+            raise ValueError("Invalid split string (must be train or val):", self.split)
 
     def __len__(self):
         return self.dataset_size
@@ -54,59 +60,71 @@ class CommaDataset(torch.utils.data.Dataset):
         local_path = paths.get_local_path(positions, orientations, frame_id)
         
         # Divide data into previous and future arrays
-        future_path = local_path[frame_id + 1 : frame_id + 1 + self.args['future_steps']]
-        previous_path = local_path[frame_id - self.args['past_steps'] : frame_id + 1]
+        future_path = local_path[frame_id + 1 : frame_id + 1 + self.cfg['future_steps']]
+        previous_path = local_path[frame_id - self.cfg['past_steps'] : frame_id + 1]
         
         # Grab previous and current frames
         frames = []
-        for f_id in range(frame_id - self.args['past_steps'], frame_id + 1):
+        for f_id in range(frame_id - self.cfg['past_steps'], frame_id + 1):
             filename = str(f_id).zfill(6) + '.jpg'
-            frame = Image.open(str(route_path / "images" / filename))
-            
-            # Apply transforms to frame
-            frame = self.img_transform(frame)
-            frames.append(frame)
+            frame = Image.open(str(route_path / 'images' / filename))
+            frames.append(self.to_tensor(frame))
         
         # Stack frames into single array, (T, C, H, W)
         frames = torch.stack(frames)
+        
+        if self.img_transforms is not None:
+            frames = self.img_transforms(frames)
 
         sample = {}
         sample['frames'] = frames
-        sample['label_path'] = torch.from_numpy(future_path)
-        sample['prev_path'] = torch.from_numpy(previous_path)
+        sample['label_path'] = torch.from_numpy(future_path).float()
+        sample['prev_path'] = torch.from_numpy(previous_path).float()
         
-        if self.predict_speed:
-            # Load in velocities and convert to speed
-            velocities = np.load(route_path / "frame_velocities.npy")
-            speeds = np.linalg.norm(velocities, axis=1)
-            
-            # Divide data into previous and future arrays
-            future_speeds = speeds[frame_id + 1 : frame_id + 1 + self.args['future_steps']]
-            previous_speeds = speeds[frame_id - self.args['past_steps'] : frame_id]
-            
-            sample['label_speed'] = torch.from_numpy(future_speeds)
-            sample['prev_speed'] = torch.from_numpy(previous_speeds)
+        if self.full_transforms is not None:
+            sample = self.full_transforms(sample)
+        
+        if self.return_curvature:
+            sample['curv'] = self.curvatures[idx]
 
         return sample
 
 
 if __name__=="__main__":
-    cfg = {"dataset_file": "trainval_set.json",
-           "split": "val",
-           "predict_speed": True
-            }
-    
-    from torchvision.transforms import Compose, Resize, ToTensor, Normalize
-    
-    img_transforms = Compose([
-        Resize([384, 288]),
-        ToTensor(),
-        Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
-    ])
+    from torchvision import transforms as tf
+    import yaml
+    import data.transforms as dtf
+    from matplotlib import pyplot as plt
 
-    comma_ds = CommaDataset(cfg, img_transforms)
-    sample = comma_ds[0]
-    for key, val in sample.items():
-        print(key)
-        print(val.shape)
-    print(f"dataset size: {len(comma_ds)}")
+    # Load config file to test dataset class and augs
+    cfg_name = "configs/resnet34_noseq.yaml"
+    cfg_path = Path(__file__).parent.parent.absolute() / cfg_name
+    with cfg_path.open('r') as f:
+        cfg = yaml.safe_load(f)
+    print(cfg)
+
+    train_img_augs = tf.Compose([getattr(tf, name)(**kwargs) for name, kwargs in cfg['train_augs']['img_augs'].items()])
+    train_full_augs = tf.Compose([getattr(dtf, name)(**kwargs) for name, kwargs in cfg['train_augs']['full_augs'].items()])
+    val_augs = tf.Compose([getattr(tf, name)(**kwargs) for name, kwargs in cfg['val_augs'].items()])
+
+    train_set = CommaDataset(cfg, 'train', train_img_augs, train_full_augs)
+    val_set = CommaDataset(cfg, 'val', val_augs, None)
+    
+    print(f"trainset size: {len(train_set)}")
+    print(f"valset size: {len(val_set)}")
+    
+    sample = train_set[0]
+    print("First training set sample:")
+    print(sample.keys())
+    print(sample['frames'].shape)
+    print(sample['frames'].dtype)
+    print(sample['label_path'].shape)
+    print(sample['label_path'].dtype)
+    print(sample['prev_path'].shape)
+    print(sample['prev_path'].dtype)
+
+    np_img = logging.tensor_to_img(sample['frames'][0])
+    disp_img = logging.display_path(np_img, sample['label_path'].numpy())
+
+    plt.imshow(disp_img)
+    plt.show()

@@ -1,0 +1,73 @@
+# Model
+model:
+  encoder:
+    name: regnety_008
+    params:
+      timm_feat_len: 768
+      enc_feat_len: 256
+      dropout_prob: 0.4
+  decoder:
+    name: FCDecoder
+    params:
+      fc_size: 256
+      dropout_prob: 0.4
+
+# Training loop settings
+training:
+  num_steps: &numsteps 50000
+  log_steps: 50
+  val_interval: 1000
+  num_log_imgs: 8
+  checkpoint_dir: /home/martin/datasets/comma2k19/checkpoints
+  amp_backend: native
+  batch_size: 64
+  num_workers: 8
+
+# Dataset settings
+dataset:
+  dataset_file: full_trainval_set.json
+  future_steps: 36
+  past_steps: 0
+  predict_speed: false
+
+# Augmentations
+# For img_augs: Use exact name in torchvision as the key and its kwargs as the value
+# For full_augs: Use exact name in data/transforms.py as the key and its kwargs as the value
+# Normalize should be last in the img_augs
+train_augs:
+  img_augs:
+    GaussianBlur:
+      kernel_size: [3, 5]
+      sigma: [0.01, 2]
+    ColorJitter:
+      brightness: 0.7
+      contrast: 0.6
+      saturation: 0.7
+      hue: 0.2
+    Normalize:
+      mean: [0.485, 0.456, 0.406]
+      std: [0.229, 0.224, 0.225]
+  full_augs:
+    RandomHorizontalFlip:
+      prob: 0.5
+
+val_augs:
+  Normalize:
+    mean: [0.485, 0.456, 0.406]
+    std: [0.229, 0.224, 0.225]
+
+# Provide exact name from torch.optim library and kwargs
+scheduler:
+  name: OneCycleLR
+  kwargs:
+    max_lr: 0.01
+    total_steps: *numsteps
+
+# Provide exact name from torch.optim.lr_scheduler and kwargs
+optimizer:
+  name: AdamW
+  kwargs:
+    lr: 1.0e-3
+    betas: [0.9, 0.999]
+    weight_decay: 8.0e-4
+    

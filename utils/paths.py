@@ -5,7 +5,7 @@ from scipy import interpolate
 
 import lib.orientation as orient
 import lib.camera as cam
-from lib.camera import img_from_device, denormalize
+from lib.camera import img_from_device, denormalize, FULL_FRAME_SIZE
 
 
 def get_local_path(positions, orientations, reference_idx):
@@ -33,9 +33,17 @@ def draw_path(device_path, img, width=0.5, height=1, fill_color=(128,0,255), lin
     img_pts_r = img_pts_r[valid].astype(int)
 
     for i in range(1, len(img_pts_l)):
-        u1,v1,u2,v2 = np.append(img_pts_l[i-1], img_pts_r[i-1])
-        u3,v3,u4,v4 = np.append(img_pts_l[i], img_pts_r[i])
-        pts = np.array([[u1, v1], [u2, v2], [u4, v4], [u3, v3]], np.int32).reshape((-1, 1, 2))
+        # Scale image points from original image size to current size
+        w1, h1 = FULL_FRAME_SIZE
+        h2, w2, _ = img.shape
+        u1, v1 = img_pts_l[i-1]
+        u2, v2 = img_pts_r[i-1]
+        u3, v3 = img_pts_l[i]
+        u4, v4 = img_pts_r[i]
+        pts = np.array([[u1, v1], [u2, v2], [u4, v4], [u3, v3]], np.float64)
+        pts[:, 0] *= w2/w1
+        pts[:, 1] *= h2/h1
+        pts = pts.astype(np.int32).reshape((-1, 1, 2))
         cv2.fillPoly(img, [pts], fill_color)
         cv2.polylines(img, [pts], True, line_color)
 
